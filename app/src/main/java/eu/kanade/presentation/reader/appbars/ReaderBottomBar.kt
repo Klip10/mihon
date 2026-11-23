@@ -13,6 +13,7 @@ import eu.kanade.tachiyomi.ui.reader.setting.ReadingMode
 import mihon.icons.custommaterialsymbols.CustomMaterialSymbols
 import mihon.icons.custommaterialsymbols.rounded.CropOff
 import mihon.icons.materialsymbols.MaterialSymbols
+import mihon.icons.materialsymbols.rounded.ChatBubble
 import mihon.icons.materialsymbols.rounded.Crop
 import mihon.icons.materialsymbols.rounded.Settings
 import tachiyomi.i18n.MR
@@ -27,6 +28,7 @@ fun ReaderBottomBar(
     cropEnabled: Boolean,
     onClickCropBorder: () -> Unit,
     onClickSettings: () -> Unit,
+    onClickComments: (() -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
     Row(
@@ -54,6 +56,15 @@ fun ReaderBottomBar(
                 imageVector = if (cropEnabled) MaterialSymbols.Rounded.Crop else CustomMaterialSymbols.Rounded.CropOff,
                 contentDescription = stringResource(MR.strings.pref_crop_borders),
             )
+        }
+
+        if (onClickComments != null) {
+            IconButton(onClick = onClickComments) {
+                Icon(
+                    imageVector = MaterialSymbols.Rounded.ChatBubble,
+                    contentDescription = "Комментарии",
+                )
+            }
         }
 
         IconButton(onClick = onClickSettings) {

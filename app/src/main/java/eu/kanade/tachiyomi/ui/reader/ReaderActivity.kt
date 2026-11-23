@@ -114,6 +114,7 @@ import kotlinx.coroutines.launch
 import logcat.LogPriority
 import mihon.app.di.AppGraph
 import mihon.core.metro.metroGraph
+import mihon.feature.libcomments.CommentsSheet
 import tachiyomi.core.common.Constants
 import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.core.common.util.system.logcat
@@ -280,7 +281,7 @@ class ReaderActivity : BaseActivity() {
             }
 
             val onDismissRequest = viewModel::closeDialog
-            when (state.dialog) {
+            when (val dialog = state.dialog) {
                 is ReaderViewModel.Dialog.Settings -> {
                     ReaderSettingsDialog(
                         onDismissRequest = onDismissRequest,
@@ -318,6 +319,17 @@ class ReaderActivity : BaseActivity() {
                         onShare = viewModel::shareImage,
                         onSave = viewModel::saveImage,
                     )
+                }
+                is ReaderViewModel.Dialog.Comments -> {
+                    val repository = viewModel.commentsRepository
+                    if (repository != null) {
+                        CommentsSheet(
+                            repository = repository,
+                            chapterUrl = dialog.chapterUrl,
+                            pageNumber = dialog.pageNumber,
+                            onDismissRequest = onDismissRequest,
+                        )
+                    }
                 }
                 null -> {}
             }
@@ -610,6 +622,7 @@ class ReaderActivity : BaseActivity() {
                 menuToggleToast = toast(if (enabled) MR.strings.on else MR.strings.off)
             },
             onClickSettings = viewModel::openSettingsDialog,
+            onClickComments = viewModel::openCommentsDialog.takeIf { viewModel.commentsRepository != null },
         )
     }
 

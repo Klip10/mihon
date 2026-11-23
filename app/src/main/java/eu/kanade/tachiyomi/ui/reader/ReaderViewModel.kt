@@ -76,6 +76,8 @@ import kotlinx.coroutines.withContext
 import logcat.LogPriority
 import mihon.core.metro.AppCoroutineScope
 import mihon.data.cache.ChapterCache
+import mihon.feature.libcomments.LibCommentsRepository
+import mihon.feature.libcomments.isLibSource
 import tachiyomi.core.common.preference.toggle
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.chapter.interactor.GetChaptersByMangaId
@@ -928,6 +930,15 @@ class ReaderViewModel(
         mutableState.update { it.copy(dialog = Dialog.Settings) }
     }
 
+    fun openCommentsDialog() {
+        val chapterUrl = getCurrentChapter()?.chapter?.url ?: return
+        val pageNumber = state.value.currentPage.takeIf { it > 0 } ?: return
+        mutableState.update { it.copy(dialog = Dialog.Comments(chapterUrl, pageNumber)) }
+    }
+
+    val commentsRepository: LibCommentsRepository?
+        get() = getSource()?.takeIf { it.isLibSource() }?.let(::LibCommentsRepository)
+
     fun closeDialog() {
         mutableState.update { it.copy(dialog = null) }
     }
@@ -1109,6 +1120,7 @@ class ReaderViewModel(
         data object ReadingModeSelect : Dialog
         data object OrientationModeSelect : Dialog
         data class PageActions(val page: ReaderPage) : Dialog
+        data class Comments(val chapterUrl: String, val pageNumber: Int) : Dialog
     }
 
     sealed interface Event {
