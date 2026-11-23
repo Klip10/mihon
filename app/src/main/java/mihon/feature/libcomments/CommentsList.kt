@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -15,6 +16,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
@@ -34,6 +36,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.AnnotatedString
@@ -255,11 +260,7 @@ private fun CommentItem(comment: LibComment, imageHeaders: Headers, modifier: Mo
     val avatarRequest = remember(comment.avatarUrl) {
         ImageRequest.Builder(context)
             .data(comment.avatarUrl)
-            .httpHeaders(
-                NetworkHeaders.Builder()
-                    .apply { imageHeaders.forEach { (name, value) -> set(name, value) } }
-                    .build(),
-            )
+            .httpHeaders(imageHeaders.toNetworkHeaders())
             .build()
     }
     Row(
@@ -290,7 +291,7 @@ private fun CommentItem(comment: LibComment, imageHeaders: Headers, modifier: Mo
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            CommentText(comment.html)
+            CommentText(comment.html, imageHeaders)
             Text(
                 text = "▲ ${comment.likes}   ▼ ${comment.dislikes}",
                 style = MaterialTheme.typography.labelMedium,
@@ -303,17 +304,25 @@ private fun CommentItem(comment: LibComment, imageHeaders: Headers, modifier: Mo
 
 private const val SPOILER_SCHEME = "spoiler:"
 
-/** Hides the site's spoiler blocks behind a tappable label until the reader opens them. */
+// Relative image paths in comments point at the site's image host.
+private const val IMAGE_BASE_URL = "https://cover.imglib.info/"
+
+private class CommentContent(val text: AnnotatedString, val images: List<String>)
+
+/**
+ * Hides the site's spoiler blocks behind a tappable label until the reader opens them, and shows the
+ * comment's images under its text, since text can't hold them.
+ */
 @Composable
-private fun CommentText(html: String) {
+private fun CommentText(html: String, imageHeaders: Headers) {
     var revealed by remember(html) { mutableStateOf(emptySet<Int>()) }
     val uriHandler = LocalUriHandler.current
     val hiddenStyle = SpanStyle(
         color = MaterialTheme.colorScheme.onTertiaryContainer,
         background = MaterialTheme.colorScheme.tertiaryContainer,
     )
-    val text = remember(html, revealed, hiddenStyle) {
-        val body = Jsoup.parseBodyFragment(html).body()
+    val content = remember(html, revealed, hiddenStyle) {
+        val body = Jsoup.parseBodyFragment(html, IMAGE_BASE_URL).body()
         body.select(".spoiler-node")
             .filter { spoiler -> spoiler.parents().none { it.hasClass("spoiler-node") } }
             .forEachIndexed { i, spoiler ->
@@ -326,9 +335,12 @@ private fun CommentText(html: String) {
                     )
                 }
             }
-        val processed = body.html()
-        AnnotatedString.fromHtml(
-            htmlString = processed,
+        val images = body.select("img").mapNotNull { img ->
+            img.absUrl("src").takeIf { it.isNotBlank() }.also { img.remove() }
+        }
+        body.select("p").filter { !it.hasText() && it.children().isEmpty() }.forEach { it.remove() }
+        val text = AnnotatedString.fromHtml(
+            htmlString = body.html(),
             linkStyles = TextLinkStyles(style = hiddenStyle),
             linkInteractionListener = { link ->
                 val url = (link as? LinkAnnotation.Url)?.url ?: return@fromHtml
@@ -340,6 +352,40 @@ private fun CommentText(html: String) {
                 }
             },
         )
+        CommentContent(text.subSequence(0, text.text.trimEnd().length), images)
     }
-    Text(text = text, style = MaterialTheme.typography.bodyMedium)
+    if (content.text.isNotEmpty()) {
+        Text(text = content.text, style = MaterialTheme.typography.bodyMedium)
+    }
+    val context = LocalContext.current
+    content.images.forEach { url ->
+        val request = remember(url) {
+            ImageRequest.Builder(context)
+                .data(url)
+                .httpHeaders(imageHeaders.toNetworkHeaders())
+                .build()
+        }
+        AsyncImage(
+            model = request,
+            contentDescription = null,
+            contentScale = ContentScale.Fit,
+            alignment = Alignment.CenterStart,
+            modifier = Modifier
+                .padding(top = 4.dp)
+                .heightIn(max = 280.dp)
+                .clip(RoundedCornerShape(8.dp)),
+        )
+    }
+}
+
+private fun Headers.toNetworkHeaders(): NetworkHeaders =
+    NetworkHeaders.Builder()
+        .apply { forEach { (name, value) -> set(name, value) } }
+        .build()
+
+/** Pure black themes would leave comments on black, which reads poorly under pages; lift them to a dark grey. */
+@Composable
+fun commentsBackgroundColor(): Color {
+    val colors = MaterialTheme.colorScheme
+    return if (colors.surface.luminance() < 0.02f) Color(0xFF1E1F22) else colors.surfaceContainerHigh
 }

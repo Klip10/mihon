@@ -87,7 +87,7 @@ private fun PageCommentsSection(
     expanded: Boolean,
     onToggle: (() -> Unit)?,
 ) {
-    Surface(modifier = Modifier.fillMaxWidth()) {
+    Surface(modifier = Modifier.fillMaxWidth(), color = commentsBackgroundColor()) {
         Column {
             when {
                 onToggle != null -> TextButton(
