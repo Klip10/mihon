@@ -290,8 +290,9 @@ private fun CommentText(html: String) {
                 if (i in revealed) {
                     spoiler.unwrap()
                 } else {
+                    val title = spoiler.attr("data-spoiler-text").ifBlank { "Спойлер" }
                     spoiler.replaceWith(
-                        Element("a").attr("href", "$SPOILER_SCHEME$i").text("\u00A0Спойлер\u00A0"),
+                        Element("a").attr("href", "$SPOILER_SCHEME$i").text("\u00A0$title\u00A0"),
                     )
                 }
             }
