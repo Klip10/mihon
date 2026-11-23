@@ -51,6 +51,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import okhttp3.Headers
+import org.jsoup.Jsoup
+import org.jsoup.nodes.Element
 
 /** Comments of one chapter page, with paging, sort and lazily loaded replies. */
 @Stable
@@ -271,14 +273,6 @@ private fun CommentItem(comment: LibComment, imageHeaders: Headers, modifier: Mo
 
 private const val SPOILER_SCHEME = "spoiler:"
 
-// <span class="spoiler-node" data-spoiler-text="title"><span class="spoiler-node__text">text</span></span>
-private val SPOILER_REGEX = Regex(
-    """<span([^>]*class="spoiler-node"[^>]*)>(.*?)</span>\s*</span>""",
-    RegexOption.DOT_MATCHES_ALL,
-)
-private val SPOILER_TITLE_REGEX = Regex("""data-spoiler-text="([^"]*)"""")
-private val OPEN_SPAN_REGEX = Regex("""<span[^>]*>""")
-
 /** Hides the site's spoiler blocks behind a tappable label until the reader opens them. */
 @Composable
 private fun CommentText(html: String) {
@@ -289,18 +283,19 @@ private fun CommentText(html: String) {
         background = MaterialTheme.colorScheme.tertiaryContainer,
     )
     val text = remember(html, revealed, hiddenStyle) {
-        var index = 0
-        val processed = SPOILER_REGEX.replace(html) { match ->
-            val i = index++
-            if (i in revealed) {
-                match.groupValues[2].replace(OPEN_SPAN_REGEX, "")
-            } else {
-                val title = SPOILER_TITLE_REGEX.find(match.groupValues[1])?.groupValues?.get(1)
-                    ?.takeIf { it.isNotBlank() }
-                    ?: "Спойлер"
-                """<a href="$SPOILER_SCHEME$i">&nbsp;🔒 $title&nbsp;</a>"""
+        val body = Jsoup.parseBodyFragment(html).body()
+        body.select(".spoiler-node")
+            .filter { spoiler -> spoiler.parents().none { it.hasClass("spoiler-node") } }
+            .forEachIndexed { i, spoiler ->
+                if (i in revealed) {
+                    spoiler.unwrap()
+                } else {
+                    spoiler.replaceWith(
+                        Element("a").attr("href", "$SPOILER_SCHEME$i").text("\u00A0Спойлер\u00A0"),
+                    )
+                }
             }
-        }
+        val processed = body.html()
         AnnotatedString.fromHtml(
             htmlString = processed,
             linkStyles = TextLinkStyles(style = hiddenStyle),
