@@ -1,6 +1,7 @@
 package eu.kanade.tachiyomi.ui.reader.viewer.webtoon
 
 import android.graphics.ColorFilter
+import android.view.MotionEvent
 import android.view.ViewGroup
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import androidx.compose.runtime.Composable
@@ -28,6 +29,7 @@ import eu.kanade.tachiyomi.ui.reader.viewer.collectChanges
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.cancel
 import mihon.app.di.appGraph
+import mihon.feature.libcomments.PageCommentsView
 import tachiyomi.core.common.util.system.logcat
 import java.util.Collections
 import java.util.WeakHashMap
@@ -119,7 +121,8 @@ class WebtoonViewer(val activity: ReaderActivity, val isContinuous: Boolean = tr
                 }
             },
         )
-        recycler.tapListener = { event ->
+        recycler.tapListener = f@{ event ->
+            if (isOnComments(event)) return@f
             val viewPosition = IntArray(2)
             recycler.getLocationOnScreen(viewPosition)
             val viewPositionRelativeToWindow = IntArray(2)
@@ -131,6 +134,7 @@ class WebtoonViewer(val activity: ReaderActivity, val isContinuous: Boolean = tr
             activity.onViewerTap(pos)
         }
         recycler.longTapListener = f@{ event ->
+            if (isOnComments(event)) return@f false
             if (activity.viewModel.state.value.menuVisible || general.longTapEnabled) {
                 val child = recycler.findChildViewUnder(event.x, event.y)
                 if (child != null) {
@@ -183,6 +187,14 @@ class WebtoonViewer(val activity: ReaderActivity, val isContinuous: Boolean = tr
     fun onPageViewCreated(view: ReaderPageImageView) {
         pageViews += view
     }
+
+    private val commentViews = Collections.newSetFromMap(WeakHashMap<PageCommentsView, Boolean>())
+
+    fun onCommentsViewCreated(view: PageCommentsView) {
+        commentViews += view
+    }
+
+    private fun isOnComments(event: MotionEvent): Boolean = commentViews.any { it.contains(event) }
 
     @Composable
     override fun Content(modifier: Modifier) {

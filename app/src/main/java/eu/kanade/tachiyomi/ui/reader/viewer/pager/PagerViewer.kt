@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.ui.reader.viewer.pager
 
 import android.content.Context
 import android.graphics.ColorFilter
+import android.view.MotionEvent
 import android.view.ViewGroup
 import android.view.ViewGroup.LayoutParams
 import android.widget.FrameLayout
@@ -115,7 +116,8 @@ abstract class PagerViewer(val activity: ReaderActivity) : Viewer {
         pager.id = R.id.reader_pager
         pager.adapter = adapter
         pager.addOnPageChangeListener(pagerListener)
-        pager.tapListener = { event ->
+        pager.tapListener = f@{ event ->
+            if (isOnComments(event)) return@f
             val viewPosition = IntArray(2)
             pager.getLocationOnScreen(viewPosition)
             val viewPositionRelativeToWindow = IntArray(2)
@@ -126,7 +128,8 @@ abstract class PagerViewer(val activity: ReaderActivity) : Viewer {
             )
             activity.onViewerTap(pos)
         }
-        pager.longTapListener = f@{
+        pager.longTapListener = f@{ event ->
+            if (isOnComments(event)) return@f false
             if (activity.viewModel.state.value.menuVisible || general.longTapEnabled) {
                 val item = adapter.items.getOrNull(pager.currentItem)
                 if (item is ReaderPage) {
@@ -178,7 +181,7 @@ abstract class PagerViewer(val activity: ReaderActivity) : Viewer {
         SideEffect {
             pageColorFilter = pageFilter
             // The pager keeps every page it holds as a child.
-            pager.children.filterIsInstance<PagerPageHolder>().forEach { it.pageColorFilter = pageFilter }
+            pageHolders().forEach { it.pageColorFilter = pageFilter }
         }
         AndroidView(
             factory = { context -> DisallowInterceptBarrier(context).apply { addView(pager) } },
@@ -190,9 +193,14 @@ abstract class PagerViewer(val activity: ReaderActivity) : Viewer {
      * Returns the PagerPageHolder for the provided page
      */
     private fun getPageHolder(page: ReaderPage): PagerPageHolder? =
-        pager.children
-            .filterIsInstance(PagerPageHolder::class.java)
-            .firstOrNull { it.item == page }
+        pageHolders().firstOrNull { it.item == page }
+
+    private fun pageHolders(): Sequence<PagerPageHolder> = pager.children.mapNotNull {
+        it as? PagerPageHolder ?: (it as? PagerPageCommentsContainer)?.holder
+    }
+
+    private fun isOnComments(event: MotionEvent): Boolean =
+        pager.children.any { it is PagerPageCommentsContainer && it.isOnComments(event) }
 
     /**
      * Tells this viewer to set the given [chapters] as active. If the pager is currently idle,

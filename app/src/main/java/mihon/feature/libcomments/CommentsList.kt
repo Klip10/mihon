@@ -24,6 +24,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -143,55 +144,84 @@ fun CommentsList(
     }
 }
 
-/** Header, comments and footer as lazy items, so they can sit inside an existing list. */
-fun LazyListScope.commentsItems(state: PageCommentsState) {
+private fun LazyListScope.commentsItems(state: PageCommentsState) {
     item(key = "header") {
         CommentsHeader(state)
     }
     items(state.comments, key = { it.comment.id }) { root ->
-        Column {
-            CommentItem(root.comment, state.repository.imageHeaders)
-            if (root.replies.isNotEmpty()) {
-                val isExpanded = state.expanded[root.comment.id] == true
-                TextButton(
-                    onClick = { state.toggleReplies(root.comment.id) },
-                    modifier = Modifier.padding(start = 52.dp),
-                ) {
-                    Text(if (isExpanded) "Скрыть ответы" else "Показать ответы (${root.replies.size})")
-                }
-                if (isExpanded) {
-                    root.replies.forEach { reply ->
-                        CommentItem(
-                            comment = reply,
-                            imageHeaders = state.repository.imageHeaders,
-                            modifier = Modifier.padding(start = (24 * reply.level.coerceIn(1, 3)).dp),
-                        )
-                    }
-                }
-            }
-        }
+        RootCommentItem(root, state)
     }
     item(key = "footer") {
         LaunchedEffect(state.comments.size) {
             if (state.comments.isNotEmpty()) state.loadMore()
         }
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            when {
-                state.isLoading -> CircularProgressIndicator(modifier = Modifier.size(24.dp))
-                state.error != null -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(state.error!!, color = MaterialTheme.colorScheme.error)
-                    TextButton(onClick = state::reload) { Text("Повторить") }
+        CommentsFooter(state, showLoadMore = false)
+    }
+}
+
+/**
+ * Non-lazy comments for places that already scroll, like under a page. More are loaded on request, since a
+ * footer that loads by being composed would fetch every page at once here.
+ */
+@Composable
+fun CommentsColumn(state: PageCommentsState, modifier: Modifier = Modifier) {
+    Column(modifier = modifier) {
+        CommentsHeader(state)
+        state.comments.forEach { root ->
+            key(root.comment.id) {
+                RootCommentItem(root, state)
+            }
+        }
+        CommentsFooter(state, showLoadMore = true)
+    }
+}
+
+@Composable
+private fun RootCommentItem(root: RootComment, state: PageCommentsState) {
+    Column {
+        CommentItem(root.comment, state.repository.imageHeaders)
+        if (root.replies.isNotEmpty()) {
+            val isExpanded = state.expanded[root.comment.id] == true
+            TextButton(
+                onClick = { state.toggleReplies(root.comment.id) },
+                modifier = Modifier.padding(start = 52.dp),
+            ) {
+                Text(if (isExpanded) "Скрыть ответы" else "Показать ответы (${root.replies.size})")
+            }
+            if (isExpanded) {
+                root.replies.forEach { reply ->
+                    CommentItem(
+                        comment = reply,
+                        imageHeaders = state.repository.imageHeaders,
+                        modifier = Modifier.padding(start = (24 * reply.level.coerceIn(1, 3)).dp),
+                    )
                 }
-                state.comments.isEmpty() -> Text(
-                    "Комментариев пока нет",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun CommentsFooter(state: PageCommentsState, showLoadMore: Boolean) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        when {
+            state.isLoading -> CircularProgressIndicator(modifier = Modifier.size(24.dp))
+            state.error != null -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(state.error!!, color = MaterialTheme.colorScheme.error)
+                TextButton(onClick = state::reload) { Text("Повторить") }
+            }
+            state.comments.isEmpty() -> Text(
+                "Комментариев пока нет",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            showLoadMore && state.hasNextPage -> TextButton(onClick = state::loadMore) {
+                Text("Ещё комментарии")
             }
         }
     }

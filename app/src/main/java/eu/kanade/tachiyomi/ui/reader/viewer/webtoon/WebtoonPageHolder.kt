@@ -1,9 +1,11 @@
 package eu.kanade.tachiyomi.ui.reader.viewer.webtoon
 
+import android.view.View
 import android.view.ViewGroup
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.view.ViewGroup.LayoutParams.WRAP_CONTENT
 import android.widget.FrameLayout
+import android.widget.LinearLayout
 import androidx.core.view.isVisible
 import androidx.core.view.updateLayoutParams
 import androidx.core.view.updateMargins
@@ -23,6 +25,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.withContext
 import logcat.LogPriority
+import mihon.feature.libcomments.PageCommentsView
+import mihon.feature.libcomments.commentsTarget
 import okio.Buffer
 import tachiyomi.core.common.util.system.ImageUtil
 import tachiyomi.core.common.util.system.logcat
@@ -37,7 +41,8 @@ import tachiyomi.core.common.util.system.logcat
 class WebtoonPageHolder(
     private val frame: ReaderPageImageView,
     viewer: WebtoonViewer,
-) : WebtoonBaseHolder(frame, viewer) {
+    private val comments: PageCommentsView? = null,
+) : WebtoonBaseHolder(comments?.let { frame.parent as View } ?: frame, viewer) {
 
     /**
      * Loading progress bar to indicate the current progress.
@@ -86,6 +91,7 @@ class WebtoonPageHolder(
      */
     fun bind(page: ReaderPage) {
         this.page = page
+        comments?.bind(page.commentsTarget())
         frame.pageColorFilter = viewer.pageColorFilter
         loadJob?.cancel()
         loadJob = scope.launch { loadPageAndProcessStatus() }
@@ -93,7 +99,12 @@ class WebtoonPageHolder(
     }
 
     private fun refreshLayoutParams() {
-        frame.layoutParams = FrameLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply {
+        val params = if (comments != null) {
+            LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT)
+        } else {
+            FrameLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT)
+        }
+        frame.layoutParams = params.apply {
             if (!viewer.isContinuous) {
                 bottomMargin = 15.dpToPx
             }

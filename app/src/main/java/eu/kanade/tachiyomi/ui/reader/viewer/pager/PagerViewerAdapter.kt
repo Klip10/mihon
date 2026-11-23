@@ -57,7 +57,16 @@ class PagerViewerAdapter(
      */
     override fun createView(container: ViewGroup, position: Int): View {
         return when (val item = items[position]) {
-            is ReaderPage -> PagerPageHolder(readerThemedContext, viewer, item)
+            is ReaderPage -> {
+                val holder = PagerPageHolder(readerThemedContext, viewer, item)
+                val repository = viewer.activity.viewModel.commentsRepository
+                // Vertical paging would fight the scroll down to the comments.
+                if (repository != null && item !is InsertPage && viewer !is VerticalPagerViewer) {
+                    PagerPageCommentsContainer(readerThemedContext, holder, repository)
+                } else {
+                    holder
+                }
+            }
             is ChapterTransition -> PagerTransitionHolder(readerThemedContext, viewer, item)
             else -> throw NotImplementedError("Holder for ${item.javaClass} not implemented")
         }

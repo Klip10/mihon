@@ -1,6 +1,8 @@
 package eu.kanade.tachiyomi.ui.reader.viewer.webtoon
 
 import android.view.ViewGroup
+import android.view.ViewGroup.LayoutParams.MATCH_PARENT
+import android.view.ViewGroup.LayoutParams.WRAP_CONTENT
 import android.widget.LinearLayout
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
@@ -9,6 +11,7 @@ import eu.kanade.tachiyomi.ui.reader.model.ReaderPage
 import eu.kanade.tachiyomi.ui.reader.model.ViewerChapters
 import eu.kanade.tachiyomi.ui.reader.viewer.ReaderPageImageView
 import eu.kanade.tachiyomi.util.system.createReaderThemeContext
+import mihon.feature.libcomments.PageCommentsView
 
 /**
  * RecyclerView Adapter used by this [viewer] to where [ViewerChapters] updates are posted.
@@ -70,7 +73,21 @@ class WebtoonAdapter(
             PAGE_VIEW -> {
                 val view = ReaderPageImageView(readerThemedContext, isWebtoon = true)
                 viewer.onPageViewCreated(view)
-                WebtoonPageHolder(view, viewer)
+                val repository = viewer.activity.viewModel.commentsRepository
+                // Without gaps the strip reads as one image, so comments stay in the reader menu there.
+                if (repository != null && !viewer.isContinuous) {
+                    val comments = PageCommentsView(readerThemedContext, repository, collapsible = true)
+                    viewer.onCommentsViewCreated(comments)
+                    LinearLayout(readerThemedContext).apply {
+                        orientation = LinearLayout.VERTICAL
+                        layoutParams = RecyclerView.LayoutParams(MATCH_PARENT, WRAP_CONTENT)
+                        addView(view, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+                        addView(comments.view, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+                    }
+                    WebtoonPageHolder(view, viewer, comments)
+                } else {
+                    WebtoonPageHolder(view, viewer)
+                }
             }
             TRANSITION_VIEW -> {
                 val view = LinearLayout(readerThemedContext)
