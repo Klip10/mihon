@@ -1,5 +1,6 @@
 package mihon.feature.libcomments
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -32,20 +33,29 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.LinkAnnotation
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.fromHtml
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
+import coil3.network.NetworkHeaders
+import coil3.network.httpHeaders
+import coil3.request.ImageRequest
 import eu.kanade.presentation.util.relativeTimeSpanString
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import okhttp3.Headers
 
 /** Comments of one chapter page, with paging, sort and lazily loaded replies. */
 @Stable
 class PageCommentsState(
-    private val repository: LibCommentsRepository,
+    val repository: LibCommentsRepository,
     private val chapterUrl: String,
     val pageNumber: Int,
     private val scope: CoroutineScope,
@@ -138,7 +148,7 @@ fun LazyListScope.commentsItems(state: PageCommentsState) {
     }
     items(state.comments, key = { it.comment.id }) { root ->
         Column {
-            CommentItem(root.comment)
+            CommentItem(root.comment, state.repository.imageHeaders)
             if (root.replies.isNotEmpty()) {
                 val isExpanded = state.expanded[root.comment.id] == true
                 TextButton(
@@ -151,6 +161,7 @@ fun LazyListScope.commentsItems(state: PageCommentsState) {
                     root.replies.forEach { reply ->
                         CommentItem(
                             comment = reply,
+                            imageHeaders = state.repository.imageHeaders,
                             modifier = Modifier.padding(start = (24 * reply.level.coerceIn(1, 3)).dp),
                         )
                     }
@@ -207,18 +218,30 @@ private fun CommentsHeader(state: PageCommentsState) {
 }
 
 @Composable
-private fun CommentItem(comment: LibComment, modifier: Modifier = Modifier) {
+private fun CommentItem(comment: LibComment, imageHeaders: Headers, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    val avatarRequest = remember(comment.avatarUrl) {
+        ImageRequest.Builder(context)
+            .data(comment.avatarUrl)
+            .httpHeaders(
+                NetworkHeaders.Builder()
+                    .apply { imageHeaders.forEach { (name, value) -> set(name, value) } }
+                    .build(),
+            )
+            .build()
+    }
     Row(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 8.dp),
     ) {
         AsyncImage(
-            model = comment.avatarUrl,
+            model = avatarRequest,
             contentDescription = null,
             modifier = Modifier
                 .size(36.dp)
-                .clip(CircleShape),
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.surfaceVariant),
         )
         Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
@@ -235,10 +258,7 @@ private fun CommentItem(comment: LibComment, modifier: Modifier = Modifier) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            Text(
-                text = remember(comment.html) { AnnotatedString.fromHtml(comment.html) },
-                style = MaterialTheme.typography.bodyMedium,
-            )
+            CommentText(comment.html)
             Text(
                 text = "▲ ${comment.likes}   ▼ ${comment.dislikes}",
                 style = MaterialTheme.typography.labelMedium,
@@ -247,4 +267,53 @@ private fun CommentItem(comment: LibComment, modifier: Modifier = Modifier) {
             )
         }
     }
+}
+
+private const val SPOILER_SCHEME = "spoiler:"
+
+// <span class="spoiler-node" data-spoiler-text="title"><span class="spoiler-node__text">text</span></span>
+private val SPOILER_REGEX = Regex(
+    """<span([^>]*class="spoiler-node"[^>]*)>(.*?)</span>\s*</span>""",
+    RegexOption.DOT_MATCHES_ALL,
+)
+private val SPOILER_TITLE_REGEX = Regex("""data-spoiler-text="([^"]*)"""")
+private val OPEN_SPAN_REGEX = Regex("""<span[^>]*>""")
+
+/** Hides the site's spoiler blocks behind a tappable label until the reader opens them. */
+@Composable
+private fun CommentText(html: String) {
+    var revealed by remember(html) { mutableStateOf(emptySet<Int>()) }
+    val uriHandler = LocalUriHandler.current
+    val hiddenStyle = SpanStyle(
+        color = MaterialTheme.colorScheme.onTertiaryContainer,
+        background = MaterialTheme.colorScheme.tertiaryContainer,
+    )
+    val text = remember(html, revealed, hiddenStyle) {
+        var index = 0
+        val processed = SPOILER_REGEX.replace(html) { match ->
+            val i = index++
+            if (i in revealed) {
+                match.groupValues[2].replace(OPEN_SPAN_REGEX, "")
+            } else {
+                val title = SPOILER_TITLE_REGEX.find(match.groupValues[1])?.groupValues?.get(1)
+                    ?.takeIf { it.isNotBlank() }
+                    ?: "Спойлер"
+                """<a href="$SPOILER_SCHEME$i">&nbsp;🔒 $title&nbsp;</a>"""
+            }
+        }
+        AnnotatedString.fromHtml(
+            htmlString = processed,
+            linkStyles = TextLinkStyles(style = hiddenStyle),
+            linkInteractionListener = { link ->
+                val url = (link as? LinkAnnotation.Url)?.url ?: return@fromHtml
+                val spoiler = url.removePrefix(SPOILER_SCHEME).toIntOrNull()
+                if (url.startsWith(SPOILER_SCHEME) && spoiler != null) {
+                    revealed = revealed + spoiler
+                } else {
+                    uriHandler.openUri(url)
+                }
+            },
+        )
+    }
+    Text(text = text, style = MaterialTheme.typography.bodyMedium)
 }

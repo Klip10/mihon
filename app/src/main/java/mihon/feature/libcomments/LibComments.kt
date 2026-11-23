@@ -7,6 +7,7 @@ import eu.kanade.tachiyomi.source.online.HttpSource
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import okhttp3.Headers
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import java.util.concurrent.ConcurrentHashMap
 
@@ -54,6 +55,14 @@ data class CommentsPage(
 class LibCommentsRepository(private val source: HttpSource) {
 
     private val json = Json { ignoreUnknownKeys = true }
+
+    // The image host refuses requests that don't look like they come from the site.
+    val imageHeaders: Headers by lazy {
+        source.headers.newBuilder()
+            .set("Referer", "${source.baseUrl}/")
+            .set("Accept", "image/avif,image/webp,image/*,*/*;q=0.8")
+            .build()
+    }
 
     /** [pageNumber] is the 1-based page of the chapter the comments belong to. */
     suspend fun getPageComments(
