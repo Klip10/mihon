@@ -32,9 +32,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.fromHtml
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import eu.kanade.presentation.util.relativeTimeSpanString
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -49,9 +52,7 @@ class PageCommentsState(
 ) {
     var sort by mutableStateOf(CommentSort.Popular)
         private set
-    val comments = mutableStateListOf<LibComment>()
-    var total by mutableStateOf<Int?>(null)
-        private set
+    val comments = mutableStateListOf<RootComment>()
     var isLoading by mutableStateOf(false)
         private set
     var error by mutableStateOf<String?>(null)
@@ -59,8 +60,7 @@ class PageCommentsState(
     var hasNextPage by mutableStateOf(true)
         private set
 
-    val replies = mutableStateMapOf<Long, List<LibComment>>()
-    val loadingReplies = mutableStateMapOf<Long, Boolean>()
+    val expanded = mutableStateMapOf<Long, Boolean>()
 
     private var listPage = 0
     private var loadJob: Job? = null
@@ -73,8 +73,9 @@ class PageCommentsState(
 
     fun reload() {
         loadJob?.cancel()
+        isLoading = false
         comments.clear()
-        replies.clear()
+        expanded.clear()
         listPage = 0
         hasNextPage = true
         error = null
@@ -88,34 +89,20 @@ class PageCommentsState(
             try {
                 val result = repository.getPageComments(chapterUrl, pageNumber, sort, listPage + 1)
                 listPage++
-                comments.addAll(result.comments)
+                comments.addAll(result.comments.filter { new -> comments.none { it.comment.id == new.comment.id } })
                 hasNextPage = result.hasNextPage
-                total = result.total ?: total
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 error = e.message ?: e.toString()
                 hasNextPage = false
-            } finally {
-                isLoading = false
             }
+            isLoading = false
         }
     }
 
     fun toggleReplies(commentId: Long) {
-        if (replies.containsKey(commentId)) {
-            replies.remove(commentId)
-            return
-        }
-        if (loadingReplies[commentId] == true) return
-        loadingReplies[commentId] = true
-        scope.launch {
-            try {
-                replies[commentId] = repository.getReplies(commentId)
-            } catch (e: Exception) {
-                error = e.message ?: e.toString()
-            } finally {
-                loadingReplies.remove(commentId)
-            }
-        }
+        if (expanded.remove(commentId) == null) expanded[commentId] = true
     }
 }
 
@@ -149,25 +136,24 @@ fun LazyListScope.commentsItems(state: PageCommentsState) {
     item(key = "header") {
         CommentsHeader(state)
     }
-    items(state.comments, key = { it.id }) { comment ->
+    items(state.comments, key = { it.comment.id }) { root ->
         Column {
-            CommentItem(comment)
-            if (comment.replyCount > 0) {
-                val shown = state.replies[comment.id]
+            CommentItem(root.comment)
+            if (root.replies.isNotEmpty()) {
+                val isExpanded = state.expanded[root.comment.id] == true
                 TextButton(
-                    onClick = { state.toggleReplies(comment.id) },
+                    onClick = { state.toggleReplies(root.comment.id) },
                     modifier = Modifier.padding(start = 52.dp),
                 ) {
-                    Text(
-                        when {
-                            state.loadingReplies[comment.id] == true -> "Загрузка…"
-                            shown != null -> "Скрыть ответы"
-                            else -> "Показать ответы (${comment.replyCount})"
-                        },
-                    )
+                    Text(if (isExpanded) "Скрыть ответы" else "Показать ответы (${root.replies.size})")
                 }
-                shown?.forEach { reply ->
-                    CommentItem(reply, modifier = Modifier.padding(start = 40.dp))
+                if (isExpanded) {
+                    root.replies.forEach { reply ->
+                        CommentItem(
+                            comment = reply,
+                            modifier = Modifier.padding(start = (24 * reply.level.coerceIn(1, 3)).dp),
+                        )
+                    }
                 }
             }
         }
@@ -202,10 +188,7 @@ fun LazyListScope.commentsItems(state: PageCommentsState) {
 private fun CommentsHeader(state: PageCommentsState) {
     Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
         Text(
-            text = buildString {
-                append("Комментарии · стр. ${state.pageNumber}")
-                state.total?.let { append(" · $it") }
-            },
+            text = "Комментарии · стр. ${state.pageNumber}",
             style = MaterialTheme.typography.titleMedium,
         )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -252,9 +235,12 @@ private fun CommentItem(comment: LibComment, modifier: Modifier = Modifier) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            Text(text = comment.text, style = MaterialTheme.typography.bodyMedium)
             Text(
-                text = "♥ ${comment.likes}",
+                text = remember(comment.html) { AnnotatedString.fromHtml(comment.html) },
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Text(
+                text = "▲ ${comment.likes}   ▼ ${comment.dislikes}",
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 4.dp),
