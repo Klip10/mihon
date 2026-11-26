@@ -100,6 +100,11 @@ abstract class PagerViewer(val activity: ReaderActivity) : Viewer {
                 activity.hideMenu()
             }
             tracker.onPageChange(position)
+            val current = adapter.items.getOrNull(position)
+            pager.children
+                .filterIsInstance<PagerPageCommentsContainer>()
+                .filter { it.item != current }
+                .forEach { it.scrollTo(0, 0) }
         }
 
         override fun onPageScrollStateChanged(state: Int) {
