@@ -246,6 +246,16 @@ open class ReaderPageImageView @JvmOverloads constructor(
         pan { center, view -> center.also { it.x += view.width / view.scale } }
     }
 
+    /** Whether the image can still be dragged up to show more of its bottom. */
+    fun canPanDown(): Boolean = when (val view = pageView) {
+        is SubsamplingScaleImageView -> {
+            val center = view.center
+            view.isReady && center != null && center.y + view.height / 2f / view.scale < view.sHeight - 1
+        }
+        is PhotoView -> view.displayRect?.let { it.bottom > view.height + 1 } ?: false
+        else -> false
+    }
+
     /**
      * Pans the image.
      * @param fn a function that computes the new center of the image
