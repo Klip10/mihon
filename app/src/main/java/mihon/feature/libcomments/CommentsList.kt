@@ -46,6 +46,7 @@ import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.fromHtml
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import coil3.network.NetworkHeaders
@@ -282,6 +283,8 @@ private fun CommentItem(comment: LibComment, imageHeaders: Headers, modifier: Mo
                 Text(
                     text = comment.userName,
                     style = MaterialTheme.typography.labelLarge,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f, fill = false),
                 )
                 Spacer(Modifier.width(8.dp))
