@@ -45,8 +45,9 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLinkStyles
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.fromHtml
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import coil3.network.NetworkHeaders
@@ -279,21 +280,19 @@ private fun CommentItem(comment: LibComment, imageHeaders: Headers, modifier: Mo
         )
         Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = comment.userName,
-                    style = MaterialTheme.typography.labelLarge,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f, fill = false),
-                )
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    text = relativeTimeSpanString(comment.createdAtMillis),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+            val dateColor = MaterialTheme.colorScheme.onSurfaceVariant
+            val dateFont = MaterialTheme.typography.labelSmall.fontSize
+            // One text, so a long name wraps whole and the date follows it instead of floating beside it.
+            Text(
+                text = buildAnnotatedString {
+                    append(comment.userName)
+                    append("  ")
+                    withStyle(SpanStyle(color = dateColor, fontSize = dateFont)) {
+                        append(relativeTimeSpanString(comment.createdAtMillis))
+                    }
+                },
+                style = MaterialTheme.typography.labelLarge,
+            )
             CommentText(comment.html, imageHeaders)
             Text(
                 text = "▲ ${comment.likes}   ▼ ${comment.dislikes}",
