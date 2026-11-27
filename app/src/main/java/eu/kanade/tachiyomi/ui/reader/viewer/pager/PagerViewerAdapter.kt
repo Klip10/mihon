@@ -62,7 +62,7 @@ class PagerViewerAdapter(
                 val repository = viewer.activity.viewModel.commentsRepository
                 // Vertical paging would fight the scroll down to the comments.
                 if (repository != null && item !is InsertPage && viewer !is VerticalPagerViewer) {
-                    PagerPageCommentsContainer(readerThemedContext, holder, repository)
+                    PagerPageCommentsContainer(readerThemedContext, holder, repository, viewer.commentScrollPositions)
                 } else {
                     holder
                 }

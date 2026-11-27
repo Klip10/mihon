@@ -8,6 +8,7 @@ import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.view.ViewGroup.LayoutParams.WRAP_CONTENT
 import android.widget.LinearLayout
 import androidx.core.widget.NestedScrollView
+import eu.kanade.tachiyomi.ui.reader.model.ReaderPage
 import eu.kanade.tachiyomi.widget.ViewPagerAdapter
 import mihon.feature.libcomments.LibCommentsRepository
 import mihon.feature.libcomments.PageCommentsView
@@ -23,12 +24,16 @@ class PagerPageCommentsContainer(
     context: Context,
     val holder: PagerPageHolder,
     repository: LibCommentsRepository,
+    private val savedScroll: MutableMap<ReaderPage, Int>,
 ) : NestedScrollView(context), ViewPagerAdapter.PositionableView {
 
     override val item
         get() = holder.item
 
     private val comments = PageCommentsView(context, repository, collapsible = false)
+
+    /** Where to return once the comments are tall enough again, since they reload when the view is recreated. */
+    private var pendingScroll = 0
 
     init {
         comments.bind(holder.page.commentsTarget())
@@ -38,8 +43,23 @@ class PagerPageCommentsContainer(
             addView(comments.view, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
         }
         addView(content, LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+        // Stretch edges keep the pull when comments load under a finger, so the next drag down only undid it.
+        overScrollMode = OVER_SCROLL_NEVER
+        pendingScroll = savedScroll[holder.page] ?: 0
+        if (pendingScroll > 0) comments.activate()
         setOnScrollChangeListener { _: NestedScrollView, _: Int, scrollY: Int, _: Int, _: Int ->
             if (scrollY > 0) comments.activate()
+            if (pendingScroll == 0) savedScroll[holder.page] = scrollY
+        }
+    }
+
+    override fun onLayout(changed: Boolean, l: Int, t: Int, r: Int, b: Int) {
+        super.onLayout(changed, l, t, r, b)
+        if (pendingScroll == 0) return
+        val maxScroll = (getChildAt(0)?.height ?: 0) - height
+        if (maxScroll >= pendingScroll) {
+            scrollTo(0, pendingScroll)
+            pendingScroll = 0
         }
     }
 
@@ -71,8 +91,12 @@ class PagerPageCommentsContainer(
                 downX = ev.x
                 downY = ev.y
                 lastY = ev.y
-                super.onInterceptTouchEvent(ev)
-                return false
+                if (pendingScroll > 0) {
+                    pendingScroll = 0
+                    savedScroll[holder.page] = scrollY
+                }
+                // True while flinging: the touch stops the fling and keeps the drag here, like a normal scroll view.
+                return super.onInterceptTouchEvent(ev)
             }
             MotionEvent.ACTION_MOVE -> {
                 val dy = ev.y - lastY
