@@ -70,14 +70,35 @@ class LibCommentsRepository(private val source: HttpSource) {
         pageNumber: Int,
         sort: CommentSort,
         listPage: Int,
+    ): CommentsPage = getComments(
+        postId = getChapterId(chapterUrl),
+        postType = "chapter",
+        sort = sort,
+        listPage = listPage,
+        pageNumber = pageNumber,
+    )
+
+    /** [mangaUrl] is the extension's manga URL, `/<id>--<slug>`. */
+    suspend fun getMangaComments(mangaUrl: String, sort: CommentSort, listPage: Int): CommentsPage {
+        val mangaId = mangaUrl.trim('/').substringBefore("--").toLongOrNull()
+            ?: throw IllegalArgumentException("Не удалось определить ID тайтла")
+        return getComments(postId = mangaId, postType = "manga", sort = sort, listPage = listPage, pageNumber = null)
+    }
+
+    private suspend fun getComments(
+        postId: Long,
+        postType: String,
+        sort: CommentSort,
+        listPage: Int,
+        pageNumber: Int?,
     ): CommentsPage {
         val url = "$API_DOMAIN/api/comments".toHttpUrl().newBuilder()
-            .addQueryParameter("post_id", getChapterId(chapterUrl).toString())
-            .addQueryParameter("post_type", "chapter")
+            .addQueryParameter("post_id", postId.toString())
+            .addQueryParameter("post_type", postType)
             .addQueryParameter("sort_by", sort.apiValue)
             .addQueryParameter("sort_type", "desc")
             .addQueryParameter("page", listPage.toString())
-            .addQueryParameter("post_page", pageNumber.toString())
+            .apply { pageNumber?.let { addQueryParameter("post_page", it.toString()) } }
             .build()
         val response = get<CommentsResponse>(url.toString())
         val repliesByRoot = response.data.replies.groupBy { it.rootId }

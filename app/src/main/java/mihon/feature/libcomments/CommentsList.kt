@@ -62,13 +62,13 @@ import okhttp3.Headers
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
 
-/** Comments of one chapter page, with paging, sort and lazily loaded replies. */
+/** Comments of a chapter page or a manga, with paging, sort and replies. */
 @Stable
 class PageCommentsState(
     val repository: LibCommentsRepository,
-    private val chapterUrl: String,
-    val pageNumber: Int,
+    val title: String,
     private val scope: CoroutineScope,
+    private val load: suspend (sort: CommentSort, listPage: Int) -> CommentsPage,
 ) {
     var sort by mutableStateOf(CommentSort.Popular)
         private set
@@ -107,7 +107,7 @@ class PageCommentsState(
         isLoading = true
         loadJob = scope.launch {
             try {
-                val result = repository.getPageComments(chapterUrl, pageNumber, sort, listPage + 1)
+                val result = load(sort, listPage + 1)
                 listPage++
                 comments.addAll(result.comments.filter { new -> comments.none { it.comment.id == new.comment.id } })
                 hasNextPage = result.hasNextPage
@@ -134,7 +134,21 @@ fun rememberPageCommentsState(
 ): PageCommentsState {
     val scope = rememberCoroutineScope()
     val state = remember(chapterUrl, pageNumber) {
-        PageCommentsState(repository, chapterUrl, pageNumber, scope)
+        PageCommentsState(repository, "Комментарии · стр. $pageNumber", scope) { sort, listPage ->
+            repository.getPageComments(chapterUrl, pageNumber, sort, listPage)
+        }
+    }
+    LaunchedEffect(state) { state.reload() }
+    return state
+}
+
+@Composable
+fun rememberMangaCommentsState(repository: LibCommentsRepository, mangaUrl: String): PageCommentsState {
+    val scope = rememberCoroutineScope()
+    val state = remember(mangaUrl) {
+        PageCommentsState(repository, "Комментарии к тайтлу", scope) { sort, listPage ->
+            repository.getMangaComments(mangaUrl, sort, listPage)
+        }
     }
     LaunchedEffect(state) { state.reload() }
     return state
@@ -238,7 +252,7 @@ private fun CommentsFooter(state: PageCommentsState, showLoadMore: Boolean) {
 private fun CommentsHeader(state: PageCommentsState) {
     Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
         Text(
-            text = "Комментарии · стр. ${state.pageNumber}",
+            text = state.title,
             style = MaterialTheme.typography.titleMedium,
         )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

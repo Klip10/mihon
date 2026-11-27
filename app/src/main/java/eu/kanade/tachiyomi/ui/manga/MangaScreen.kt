@@ -57,6 +57,9 @@ import mihon.core.navigation.MigrationConfigRoute
 import mihon.core.navigation.Navigator
 import mihon.core.navigation.TrackInfoDialogRoute
 import mihon.core.navigation.WebViewRoute
+import mihon.feature.libcomments.LibCommentsRepository
+import mihon.feature.libcomments.MangaCommentsSheet
+import mihon.feature.libcomments.isLibSource
 import mihon.feature.migration.dialog.MigrateMangaDialog
 import mihon.presentation.core.util.isTabletUi
 import tachiyomi.core.common.util.system.logcat
@@ -100,6 +103,11 @@ fun MangaScreen(
                 logcat(LogPriority.ERROR, e) { "Failed to get manga URL" }
             }
         }
+    }
+
+    var showComments by remember { mutableStateOf(false) }
+    val commentsRepository = remember(successState.source) {
+        (successState.source as? HttpSource)?.takeIf { it.isLibSource() }?.let(::LibCommentsRepository)
     }
 
     MangaScreen(
@@ -155,6 +163,7 @@ fun MangaScreen(
         onSearch = { query, global -> performSearch(navigator, resultEventBus, query, global) },
         onCoverClicked = viewModel::showCoverDialog,
         onShareClicked = { shareManga(context, viewModel.manga, viewModel.source) }.takeIf { isHttpSource },
+        onCommentsClicked = { showComments = true }.takeIf { commentsRepository != null },
         onDownloadActionClicked = viewModel::runDownloadAction.takeIf { !successState.source.isLocalOrStub() },
         onEditCategoryClicked = viewModel::showChangeCategoryDialog.takeIf { successState.manga.favorite },
         onEditFetchIntervalClicked = viewModel::showSetFetchIntervalDialog.takeIf {
@@ -175,6 +184,14 @@ fun MangaScreen(
     )
 
     var showScanlatorsDialog by remember { mutableStateOf(false) }
+
+    if (showComments && commentsRepository != null) {
+        MangaCommentsSheet(
+            repository = commentsRepository,
+            mangaUrl = successState.manga.url,
+            onDismissRequest = { showComments = false },
+        )
+    }
 
     val onDismissRequest = { viewModel.dismissDialog() }
     when (val dialog = successState.dialog) {

@@ -32,6 +32,7 @@ fun MangaToolbar(
     navigateUp: () -> Unit,
     onClickFilter: () -> Unit,
     onClickShare: (() -> Unit)?,
+    onClickComments: (() -> Unit)?,
     onClickDownload: ((DownloadAction) -> Unit)?,
     onClickEditCategory: (() -> Unit)?,
     onClickRefresh: () -> Unit,
@@ -129,6 +130,14 @@ fun MangaToolbar(
                             AppBar.OverflowAction(
                                 title = stringResource(MR.strings.action_migrate),
                                 onClick = onClickMigrate,
+                            ),
+                        )
+                    }
+                    if (onClickComments != null) {
+                        add(
+                            AppBar.OverflowAction(
+                                title = "Комментарии",
+                                onClick = onClickComments,
                             ),
                         )
                     }

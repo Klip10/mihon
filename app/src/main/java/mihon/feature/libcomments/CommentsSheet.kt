@@ -26,3 +26,22 @@ fun CommentsSheet(
         }
     }
 }
+
+@Composable
+fun MangaCommentsSheet(
+    repository: LibCommentsRepository,
+    mangaUrl: String,
+    onDismissRequest: () -> Unit,
+) {
+    AdaptiveSheet(onDismissRequest = onDismissRequest) {
+        val state = rememberMangaCommentsState(repository, mangaUrl)
+        Surface(color = commentsBackgroundColor()) {
+            CommentsList(
+                state = state,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .fillMaxHeight(0.85f),
+            )
+        }
+    }
+}
